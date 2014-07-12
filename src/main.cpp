@@ -4,9 +4,29 @@
 #include <linux/netfilter.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <algorithm>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+
+struct packet
+{
+    u_int32_t id;
+    nfq_q_handle *qh;
+    u_int32_t data_len;
+    unsigned char *data;
+};
 
 const u_int32_t MAX_LEN = 1500;
 unsigned char * res_buf;
+
+std::mutex read_mutex;
+std::mutex write_mutex;
+std::condition_variable read_condition;
+std::condition_variable write_condition;
+const size_t RING_BUFFER_SIZE = 5;
+packet ring_buffer[RING_BUFFER_SIZE];
+volatile size_t first = 0;
+volatile size_t last = 0;
 
 u_int32_t get_packet_id(nfq_data *nfa)
 {
@@ -20,17 +40,78 @@ u_int32_t get_packet_id(nfq_data *nfa)
     }
 }
 
-static int cb(nfq_q_handle *qh, nfgenmsg *nfmsg, nfq_data *nfa, void *data)
+size_t next(size_t current)
 {
-        u_int32_t id = get_packet_id(nfa);
+    return (current + 1) % RING_BUFFER_SIZE;
+}
+
+bool is_full()
+{
+    printf("call is_full\n");
+    return next(last) == first;
+}
+
+bool is_empty()
+{
+    printf("call is_empty\n");
+    return first == last;
+}
+
+void add_packet(int id, nfq_q_handle *qh, u_int32_t data_len, unsigned char *data)
+{
+    std::unique_lock<std::mutex> lock(write_mutex);
+    while (is_full())
+    {
+        write_condition.wait(lock);
+    }
+    packet *p = &ring_buffer[last];
+    p->id = id;
+    p->qh = qh;
+    p->data_len = data_len;
+    if (p->data)
+    {
+        delete[] p->data;
+    }
+    p->data = data;
+    last = next(last);
+    read_condition.notify_one();
+}
+
+packet *get_packet()
+{
+    std::unique_lock<std::mutex> lock(read_mutex);
+    while (is_empty())
+    {
+        read_condition.wait(lock);
+    }
+    packet *p = &ring_buffer[first];
+    first = next(first);
+    write_condition.notify_one();
+    return p;
+}
+
+int cb(nfq_q_handle *qh, nfgenmsg *nfmsg, nfq_data *nfa, void *data)
+{
+    u_int32_t id = get_packet_id(nfa);
+    unsigned char *buf;
+    int len = nfq_get_payload(nfa, &buf);
+    u_int32_t res_len = std::max(MAX_LEN, (u_int32_t) len);
+    unsigned char *res_buf = new unsigned char[res_len];
+    memcpy(res_buf, buf, len);
+    u_int32_t diff = res_len - len;
+    memset(res_buf + len, 0, diff);
+    add_packet(id, qh, res_len, res_buf);
+    return 0;
+}
+
+int process_packets()
+{
+    while (true)
+    {
         printf("entering callback\n");
-        unsigned char *buf;
-        int len = nfq_get_payload(nfa, &buf);
-        u_int32_t res_len = std::max(MAX_LEN, (u_int32_t) len);
-        memcpy(res_buf, buf, len);
-        u_int32_t diff = res_len - len;
-        memset(res_buf + len, 0, diff);
-        return nfq_set_verdict(qh, id, NF_ACCEPT, res_len, res_buf);
+        packet *p = get_packet();
+        nfq_set_verdict(p->qh, p->id, NF_ACCEPT, p->data_len, p->data);
+    }
 }
 
 int main(int argc, char **argv)
@@ -75,11 +156,13 @@ int main(int argc, char **argv)
         }
 
         fd = nfq_fd(h);
+        std::thread t(process_packets);
 
         while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0) {
                 printf("pkt received\n");
                 nfq_handle_packet(h, buf, rv);
         }
+        t.join();
 
         printf("unbinding from queue 0\n");
         nfq_destroy_queue(qh);
