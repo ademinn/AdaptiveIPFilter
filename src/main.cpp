@@ -8,6 +8,165 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <arpa/inet.h>
+#include <linux/if_packet.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#include <netinet/ip.h>
+#include <netinet/ether.h>
+
+#define MY_DEST_MAC0    0x00
+#define MY_DEST_MAC1    0x00
+#define MY_DEST_MAC2    0x00
+#define MY_DEST_MAC3    0x00
+#define MY_DEST_MAC4    0x00
+#define MY_DEST_MAC5    0x00
+
+#define DEFAULT_IF  "eth0"
+#define BUF_SIZ     1024
+
+static int sum_words(u_int16_t *buf, int nwords)
+{
+  register u_int32_t    sum = 0;
+
+  while (nwords >= 16)
+  {
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    sum += (u_int16_t) ntohs(*buf++);
+    nwords -= 16;
+  }
+  while (nwords--)
+    sum += (u_int16_t) ntohs(*buf++);
+  return(sum);
+}
+
+void ip_checksum(struct ip *ip)
+{
+  register u_int32_t    sum;
+
+  ip->ip_sum = 0;
+  sum = sum_words((u_int16_t *) ip, ip->ip_hl << 1);
+
+  sum = (sum >> 16) + (sum & 0xFFFF);
+  sum += (sum >> 16);
+  sum = ~sum;
+
+  ip->ip_sum = htons(sum);
+}
+
+int sockfd;
+struct ifreq if_mac;
+struct sockaddr_ll socket_address;
+
+void init_socket()
+{
+    struct ifreq if_idx;
+    char ifName[IFNAMSIZ];
+
+    strcpy(ifName, DEFAULT_IF);
+
+    /* Open RAW socket to send on */
+    if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
+        perror("socket");
+        exit(1);
+    }
+
+    /* Get the index of the interface to send on */
+    memset(&if_idx, 0, sizeof(struct ifreq));
+    strncpy(if_idx.ifr_name, ifName, IFNAMSIZ-1);
+    if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0)
+    {
+        perror("SIOCGIFINDEX");
+        exit(1);
+    }
+    /* Get the MAC address of the interface to send on */
+    memset(&if_mac, 0, sizeof(struct ifreq));
+    strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
+    if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0)
+    {
+        perror("SIOCGIFHWADDR");
+        exit(1);
+    }
+
+    /* Index of the network device */
+    socket_address.sll_ifindex = if_idx.ifr_ifindex;
+    /* Address length*/
+    socket_address.sll_halen = ETH_ALEN;
+    /* Destination MAC */
+    socket_address.sll_addr[0] = MY_DEST_MAC0;
+    socket_address.sll_addr[1] = MY_DEST_MAC1;
+    socket_address.sll_addr[2] = MY_DEST_MAC2;
+    socket_address.sll_addr[3] = MY_DEST_MAC3;
+    socket_address.sll_addr[4] = MY_DEST_MAC4;
+    socket_address.sll_addr[5] = MY_DEST_MAC5;
+}
+
+void send_empty_packet(in_addr src, in_addr dst)
+{
+    int tx_len = 0;
+    char sendbuf[BUF_SIZ];
+    struct ether_header *eh = (struct ether_header *) sendbuf;
+    struct ip *ip = (struct ip *) (sendbuf + sizeof(struct ether_header));
+
+    /* Construct the Ethernet header */
+    memset(sendbuf, 0, BUF_SIZ);
+    /* Ethernet header */
+    eh->ether_shost[0] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[0];
+    eh->ether_shost[1] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[1];
+    eh->ether_shost[2] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[2];
+    eh->ether_shost[3] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[3];
+    eh->ether_shost[4] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[4];
+    eh->ether_shost[5] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[5];
+    eh->ether_dhost[0] = MY_DEST_MAC0;
+    eh->ether_dhost[1] = MY_DEST_MAC1;
+    eh->ether_dhost[2] = MY_DEST_MAC2;
+    eh->ether_dhost[3] = MY_DEST_MAC3;
+    eh->ether_dhost[4] = MY_DEST_MAC4;
+    eh->ether_dhost[5] = MY_DEST_MAC5;
+    /* Ethertype field */
+    eh->ether_type = htons(ETH_P_IP);
+    tx_len += sizeof(struct ether_header);
+
+    /* Packet data */
+    tx_len += 4;
+
+    ip->ip_hl = 5;
+    ip->ip_v = 4;
+    ip->ip_len = htons(sizeof(struct iphdr));
+    ip->ip_id = 0;
+    ip->ip_off = 0;
+    ip->ip_ttl = 40;
+    ip->ip_p = 253;
+    ip->ip_src = src;
+    ip->ip_dst = dst;
+    inet_aton("192.168.1.106", &ip->ip_dst);
+    ip_checksum(ip);
+    tx_len += sizeof(struct ip);
+
+    /* Send packet */
+    if (sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) < 0)
+        printf("Send failed\n");
+
+}
+
 struct packet
 {
     u_int32_t id;
@@ -100,6 +259,12 @@ int cb(nfq_q_handle *qh, nfgenmsg *nfmsg, nfq_data *nfa, void *data)
     memcpy(res_buf, buf, len);
     u_int32_t diff = res_len - len;
     memset(res_buf + len, 0, diff);
+    ip *ip_ = (ip *) buf;
+    if (ip_->ip_p == 253)
+    {
+        exit(1);
+    }
+    printf("%s", inet_ntoa(ip_->ip_dst));
     add_packet(id, qh, res_len, res_buf);
     return 0;
 }
@@ -110,12 +275,15 @@ int process_packets()
     {
         printf("entering callback\n");
         packet *p = get_packet();
+        ip *ip_ = (ip *) p->data;
+        send_empty_packet(ip_->ip_src, ip_->ip_dst);
         nfq_set_verdict(p->qh, p->id, NF_ACCEPT, p->data_len, p->data);
     }
 }
 
 int main(int argc, char **argv)
 {
+        init_socket();
         res_buf = new unsigned char[MAX_LEN];
         char buf[4096];
         nfq_handle *h;
