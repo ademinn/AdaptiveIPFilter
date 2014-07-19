@@ -10,6 +10,8 @@ struct nfq_q_handle;
 struct nfgenmsg;
 struct nfq_data;
 
+class nfqueue;
+
 
 class nfqueue_exception : public std::runtime_error
 {
@@ -36,7 +38,7 @@ class nfq_packet
         u_int32_t get_id() const;
 
     private:
-        friend int callback_cast(nfq_q_handle *, nfgenmsg *, nfq_data *, void *);
+        friend class nfqueue;
 
         u_int32_t id;
 };
@@ -56,14 +58,12 @@ class nfqueue
         void open();
         void close();
 
-        int handle_next_packet();
+        int handle_next_packet(nfq_packet&);
         int accept_packet(const nfq_packet&);
 
-        virtual int callback(const nfq_packet&) = 0;
-
     private:
-        friend int callback_cast(nfq_q_handle *, nfgenmsg *, nfq_data *, void *);
-        
+        static int callback(nfq_q_handle *, nfgenmsg *, nfq_data *, void *);
+
         void unsafe_destroy_queue();
         void unsafe_close_handle();
 
@@ -76,7 +76,7 @@ class nfqueue
 
         size_t buffer_size;
         char *buffer;
-        
+
         /* need something like singleton here */
-        nfq_packet packet;
+        nfq_packet *packet;
 };

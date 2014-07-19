@@ -10,17 +10,14 @@
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
 
-/* nfqueue object is in <data> parameter because
- * I don't know how to pass pointer to member function to nfq_create_queue */
 namespace
 {
     u_int32_t get_packet_id(nfq_data *nfa);
 }
 
-int callback_cast(nfq_q_handle *qh, nfgenmsg *nfmsg, nfq_data *nfa, void *data);
 
 nfqueue::nfqueue(u_int16_t pf, u_int16_t qn, size_t buffer_size)
-    :protocol_family(pf), queue_num(qn), handle(0), queue_handle(0), buffer_size(buffer_size)
+    :protocol_family(pf), queue_num(qn), handle(0), queue_handle(0), buffer_size(buffer_size), packet(0)
 {
     buffer = new char[buffer_size];
 }
@@ -48,7 +45,7 @@ void nfqueue::open()
         throw nfqueue_exception("error during nfq_bind_pf()");
     }
 
-    queue_handle = nfq_create_queue(handle,  queue_num, callback_cast, this);
+    queue_handle = nfq_create_queue(handle,  queue_num, callback, &(this->packet));
     if (!queue_handle) {
         throw nfqueue_exception("error during nfq_create_queue()");
     }
@@ -74,11 +71,12 @@ void nfqueue::close()
 }
 
 
-int nfqueue::handle_next_packet()
+int nfqueue::handle_next_packet(nfq_packet& p)
 {
     int len = recv(fd, buffer, buffer_size, 0);
     if (len > 0)
     {
+        packet = &p;
         return nfq_handle_packet(handle, buffer, len);
     } else
     {
@@ -87,10 +85,11 @@ int nfqueue::handle_next_packet()
 }
 
 
-int nfqueue::accept_packet(const nfq_packet& packet)
+int nfqueue::accept_packet(const nfq_packet& p)
 {
-    return nfq_set_verdict(queue_handle, packet.get_id(), NF_ACCEPT, packet.data_len, packet.data);
+    return nfq_set_verdict(queue_handle, p.get_id(), NF_ACCEPT, p.data_len, p.data);
 }
+
 
 void nfqueue::unsafe_destroy_queue()
 {
@@ -135,16 +134,16 @@ u_int32_t nfq_packet::get_id() const
 }
 
 
-int callback_cast(nfq_q_handle *qh, nfgenmsg *nfmsg, nfq_data *nfa, void *data)
+int nfqueue::callback(nfq_q_handle *qh, nfgenmsg *nfmsg, nfq_data *nfa, void *data)
 {
-    nfqueue *nfq = static_cast<nfqueue *>(data);
+    nfq_packet *p = *(static_cast<nfq_packet **>(data));
     unsigned char *buf;
     int len = nfq_get_payload(nfa, &buf);
 
-    nfq->packet.id = get_packet_id(nfa);
-    nfq->packet.data_len = static_cast<u_int32_t>(len);
-    memcpy(nfq->packet.data, buf, len);
-    return nfq->callback(nfq->packet);
+    p->id = get_packet_id(nfa);
+    p->data_len = static_cast<u_int32_t>(len);
+    memcpy(p->data, buf, len);
+    return 0;
 }
 
 
