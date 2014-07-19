@@ -19,17 +19,14 @@
 #include <netinet/ip.h>
 #include <netinet/ether.h>
 
+// for ether_aton
+#include <net/ethernet.h>
+
 #include "nfqueue.h"
 
-#define MY_DEST_MAC0    0x00
-#define MY_DEST_MAC1    0x00
-#define MY_DEST_MAC2    0x00
-#define MY_DEST_MAC3    0x00
-#define MY_DEST_MAC4    0x00
-#define MY_DEST_MAC5    0x00
-
-#define DEFAULT_IF  "eth0"
 #define BUF_SIZ     1024
+
+ether_addr *dest_mac;
 
 static int sum_words(u_int16_t *buf, int nwords)
 {
@@ -78,12 +75,12 @@ int sockfd;
 struct ifreq if_mac;
 struct sockaddr_ll socket_address;
 
-void init_socket()
+void init_socket(const char *if_name)
 {
     struct ifreq if_idx;
-    char ifName[IFNAMSIZ];
+    //char ifName[IFNAMSIZ];
 
-    strcpy(ifName, DEFAULT_IF);
+    //strcpy(ifName, DEFAULT_IF);
 
     /* Open RAW socket to send on */
     if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
@@ -93,7 +90,7 @@ void init_socket()
 
     /* Get the index of the interface to send on */
     memset(&if_idx, 0, sizeof(struct ifreq));
-    strncpy(if_idx.ifr_name, ifName, IFNAMSIZ-1);
+    strncpy(if_idx.ifr_name, if_name, IFNAMSIZ-1);
     if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0)
     {
         perror("SIOCGIFINDEX");
@@ -101,7 +98,7 @@ void init_socket()
     }
     /* Get the MAC address of the interface to send on */
     memset(&if_mac, 0, sizeof(struct ifreq));
-    strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
+    strncpy(if_mac.ifr_name, if_name, IFNAMSIZ-1);
     if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0)
     {
         perror("SIOCGIFHWADDR");
@@ -113,12 +110,7 @@ void init_socket()
     /* Address length*/
     socket_address.sll_halen = ETH_ALEN;
     /* Destination MAC */
-    socket_address.sll_addr[0] = MY_DEST_MAC0;
-    socket_address.sll_addr[1] = MY_DEST_MAC1;
-    socket_address.sll_addr[2] = MY_DEST_MAC2;
-    socket_address.sll_addr[3] = MY_DEST_MAC3;
-    socket_address.sll_addr[4] = MY_DEST_MAC4;
-    socket_address.sll_addr[5] = MY_DEST_MAC5;
+    memcpy(socket_address.sll_addr, dest_mac->ether_addr_octet, ETH_ALEN);
 }
 
 void send_empty_packet(in_addr src, in_addr dst)
@@ -137,12 +129,7 @@ void send_empty_packet(in_addr src, in_addr dst)
     eh->ether_shost[3] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[3];
     eh->ether_shost[4] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[4];
     eh->ether_shost[5] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[5];
-    eh->ether_dhost[0] = MY_DEST_MAC0;
-    eh->ether_dhost[1] = MY_DEST_MAC1;
-    eh->ether_dhost[2] = MY_DEST_MAC2;
-    eh->ether_dhost[3] = MY_DEST_MAC3;
-    eh->ether_dhost[4] = MY_DEST_MAC4;
-    eh->ether_dhost[5] = MY_DEST_MAC5;
+    memcpy(eh->ether_dhost, dest_mac->ether_addr_octet, ETH_ALEN);
     /* Ethertype field */
     eh->ether_type = htons(ETH_P_IP);
     tx_len += sizeof(struct ether_header);
@@ -237,7 +224,14 @@ int process_packets()
 
 int main(int argc, char **argv)
 {
-    init_socket();
+    if (argc < 3)
+    {
+        printf("not enough arguments");
+        exit(1);
+    }
+    dest_mac = ether_aton(argv[2]);
+
+    init_socket(argv[1]);
     queue.open();
     nfq_packet p;
     std::thread t(process_packets);
