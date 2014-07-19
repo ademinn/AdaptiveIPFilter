@@ -5,12 +5,13 @@
 
 #include <stdexcept>
 
+#include "nfq_packet.h"
+
+
 struct nfq_handle;
 struct nfq_q_handle;
 struct nfgenmsg;
 struct nfq_data;
-
-class nfqueue;
 
 
 class nfqueue_exception : public std::runtime_error
@@ -19,28 +20,6 @@ class nfqueue_exception : public std::runtime_error
         nfqueue_exception(const char* what_arg)
             : std::runtime_error(what_arg)
         {}
-};
-
-
-class nfq_packet
-{
-    public:
-        static const u_int32_t BUFFER_SIZE = 1500;
-
-        u_int32_t data_len;
-        unsigned char * const data;
-
-        nfq_packet();
-        ~nfq_packet();
-
-        nfq_packet& operator=(const nfq_packet&);
-
-        u_int32_t get_id() const;
-
-    private:
-        friend class nfqueue;
-
-        u_int32_t id;
 };
 
 
