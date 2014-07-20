@@ -23,6 +23,7 @@
 #include <net/ethernet.h>
 
 #include "nfqueue.h"
+#include "ring_buffer.h"
 
 #define BUF_SIZ     1024
 
@@ -155,72 +156,23 @@ void send_empty_packet(in_addr src, in_addr dst)
 
 }
 
-const u_int32_t MAX_LEN = 1500;
-unsigned char * res_buf;
 
-std::mutex read_mutex;
-std::mutex write_mutex;
-std::condition_variable read_condition;
-std::condition_variable write_condition;
-const size_t RING_BUFFER_SIZE = 5;
-nfq_packet ring_buffer[RING_BUFFER_SIZE];
-volatile size_t first = 0;
-volatile size_t last = 0;
 nfqueue queue;
+ring_buffer<nfq_packet> rbuf;
 
-size_t next(size_t current)
-{
-    return (current + 1) % RING_BUFFER_SIZE;
-}
-
-bool is_full()
-{
-    printf("call is_full\n");
-    return next(last) == first;
-}
-
-bool is_empty()
-{
-    printf("call is_empty\n");
-    return first == last;
-}
-
-void add_packet(const nfq_packet& p)
-{
-    std::unique_lock<std::mutex> lock(write_mutex);
-    while (is_full())
-    {
-        write_condition.wait(lock);
-    }
-    ring_buffer[last] = p;
-    last = next(last);
-    read_condition.notify_one();
-}
-
-nfq_packet *get_packet()
-{
-    std::unique_lock<std::mutex> lock(read_mutex);
-    while (is_empty())
-    {
-        read_condition.wait(lock);
-    }
-    nfq_packet *p = &ring_buffer[first];
-    first = next(first);
-    write_condition.notify_one();
-    return p;
-}
 
 int process_packets()
 {
+    nfq_packet p;
     while (true)
     {
-        printf("entering callback\n");
-        nfq_packet *p = get_packet();
-        ip *ip_ = (ip *) p->data;
+        p = rbuf.pop();
+        ip *ip_ = (ip *) p.data;
         send_empty_packet(ip_->ip_src, ip_->ip_dst);
-        queue.accept_packet(*p);
+        queue.accept_packet(p);
     }
 }
+
 
 int main(int argc, char **argv)
 {
@@ -237,14 +189,13 @@ int main(int argc, char **argv)
     std::thread t(process_packets);
     while (true)
     {
-        int status = queue.handle_next_packet(p);
-        if (status < 0)
+        if (queue.handle_next_packet(p) < 0)
         {
             break;
         }
         memset(p.data + p.data_len, 0, nfq_packet::BUFFER_SIZE - p.data_len);
         p.data_len = nfq_packet::BUFFER_SIZE;
-        add_packet(p);
+        rbuf.put(p);
     }
     t.join();
     queue.close();

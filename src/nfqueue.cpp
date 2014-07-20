@@ -77,7 +77,10 @@ int nfqueue::handle_next_packet(nfq_packet& p)
     if (len > 0)
     {
         packet = &p;
-        return nfq_handle_packet(handle, buffer, len);
+        mtx.lock();
+        int result = nfq_handle_packet(handle, buffer, len);
+        mtx.unlock();
+        return result;
     } else
     {
         return len;
@@ -87,7 +90,10 @@ int nfqueue::handle_next_packet(nfq_packet& p)
 
 int nfqueue::accept_packet(const nfq_packet& p)
 {
-    return nfq_set_verdict(queue_handle, p.get_id(), NF_ACCEPT, p.data_len, p.data);
+    mtx.lock();
+    int result = nfq_set_verdict(queue_handle, p.get_id(), NF_ACCEPT, p.data_len, p.data);
+    mtx.unlock();
+    return result;
 }
 
 

@@ -5,6 +5,8 @@
 
 #include <stdexcept>
 
+#include <mutex>
+
 #include "nfq_packet.h"
 
 
@@ -55,6 +57,8 @@ class nfqueue
 
         size_t buffer_size;
         char *buffer;
+
+        std::mutex mtx;
 
         /* need something like singleton here */
         nfq_packet *packet;

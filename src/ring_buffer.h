@@ -1,9 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <mutex>
 #include <condition_variable>
-
-#include <stdio.h>
 
 template <typename T>
 class ring_buffer
@@ -24,9 +23,9 @@ class ring_buffer
         size_t buffer_size;
         T *values;
 
-        volatile size_t first;
-        volatile size_t last;
-        volatile size_t count;
+        std::atomic<size_t> first;
+        std::atomic<size_t> last;
+        std::atomic<size_t> count;
 
         std::mutex read_mutex;
         std::mutex write_mutex;
@@ -54,14 +53,10 @@ template <typename T>
 void ring_buffer<T>::put(const T& value)
 {
     std::unique_lock<std::mutex> lock(write_mutex);
-    while (is_full())
-    {
-        write_condition.wait(lock);
-    }
+    write_condition.wait(lock, [this](){ return !(this->is_full()); });
     values[last] = value;
     last = next(last);
     count++;
-    printf("put count: %ld, first: %ld, last: %ld\n", count, first, last);
     read_condition.notify_one();
 }
 
@@ -70,15 +65,11 @@ template <typename T>
 T& ring_buffer<T>::pop()
 {
     std::unique_lock<std::mutex> lock(read_mutex);
-    while (is_empty())
-    {
-        read_condition.wait(lock);
-    }
+    read_condition.wait(lock, [this](){ return !(this->is_empty()); });
     T& value = values[first];
     first = next(first);
-    write_condition.notify_one();
     count--;
-    printf("pop count: %ld, first: %ld, last: %ld\n", count, first, last);
+    write_condition.notify_one();
     return value;
 }
 
