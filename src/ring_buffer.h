@@ -15,9 +15,10 @@ class ring_buffer
 
         void put(const T&);
         T& pop();
-    private:
+
         bool is_full() const;
         bool is_empty() const;
+    private:
         size_t next(size_t) const;
 
         size_t buffer_size;
