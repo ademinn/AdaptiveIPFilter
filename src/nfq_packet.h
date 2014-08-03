@@ -1,6 +1,10 @@
 #pragma once
 
 #include "packet.h"
+#include <netinet/in.h>
+
+struct ip;
+
 
 class nfq_packet : public packet
 {
@@ -11,9 +15,11 @@ class nfq_packet : public packet
         nfq_packet& operator=(const nfq_packet&);
 
         void set_data_len(u_int32_t);
-        void drop_ip_payload();
-        void copy_addr(const nfq_packet&);
+        const in_addr& src() const;
+        const in_addr& dst() const;
     private:
         friend class nfqueue;
+
         u_int32_t id;
+        ip *iph;
 };

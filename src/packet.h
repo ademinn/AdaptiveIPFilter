@@ -17,9 +17,9 @@ class packet
         packet& operator=(const packet&);
 
         void clear();
-        void * const data;
     protected:
         friend class nfqueue;
 
         u_int32_t data_len;
+        void * const data;
 };

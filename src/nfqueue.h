@@ -41,7 +41,6 @@ class nfqueue
         int recv_packet(packet&);
         int handle_packet(const packet&, nfq_packet&);
         int accept_packet(const nfq_packet&);
-        int handle_empty(nfq_packet&);
     private:
         static int callback(nfq_q_handle *, nfgenmsg *, nfq_data *, void *);
 

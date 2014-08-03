@@ -86,17 +86,6 @@ int nfqueue::handle_packet(const packet& rp, nfq_packet& p)
 }
 
 
-int nfqueue::handle_empty(nfq_packet& p)
-{
-    //int len = recv(fd, buffer, buffer_size, 0);
-    memset(buffer, 0, 8192);
-    nfq_p = &p;
-    int result = nfq_handle_packet(handle, buffer, 0);
-    return result;
-}
-
-
-
 int nfqueue::accept_packet(const nfq_packet& p)
 {
     printf("%d\n", p.id);
