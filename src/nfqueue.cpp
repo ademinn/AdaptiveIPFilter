@@ -9,6 +9,7 @@
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
+#include <stdio.h>
 
 namespace
 {
@@ -16,17 +17,15 @@ namespace
 }
 
 
-nfqueue::nfqueue(u_int16_t pf, u_int16_t qn, size_t buffer_size)
-    :protocol_family(pf), queue_num(qn), handle(0), queue_handle(0), buffer_size(buffer_size), packet(0)
+nfqueue::nfqueue(u_int16_t pf, u_int16_t qn)
+    :protocol_family(pf), queue_num(qn), handle(0), queue_handle(0), nfq_p(0), buffer(new char[8192])
 {
-    buffer = new char[buffer_size];
 }
 
 
 nfqueue::~nfqueue()
 {
     close();
-    delete[] buffer;
 }
 
 
@@ -45,7 +44,7 @@ void nfqueue::open()
         throw nfqueue_exception("error during nfq_bind_pf()");
     }
 
-    queue_handle = nfq_create_queue(handle,  queue_num, callback, &(this->packet));
+    queue_handle = nfq_create_queue(handle,  queue_num, callback, &(this->nfq_p));
     if (!queue_handle) {
         throw nfqueue_exception("error during nfq_create_queue()");
     }
@@ -71,28 +70,37 @@ void nfqueue::close()
 }
 
 
-int nfqueue::handle_next_packet(nfq_packet& p)
+int nfqueue::recv_packet(packet& rp)
 {
-    int len = recv(fd, buffer, buffer_size, 0);
-    if (len > 0)
-    {
-        packet = &p;
-        mtx.lock();
-        int result = nfq_handle_packet(handle, buffer, len);
-        mtx.unlock();
-        return result;
-    } else
-    {
-        return len;
-    }
+    int len = recv(fd, rp.data, rp.BUFFER_SIZE, 0);
+    rp.data_len = static_cast<u_int32_t>(len);
+    return len;
 }
+
+
+int nfqueue::handle_packet(const packet& rp, nfq_packet& p)
+{
+    nfq_p = &p;
+    int result = nfq_handle_packet(handle, static_cast<char *>(rp.data), rp.data_len);
+    return result;
+}
+
+
+int nfqueue::handle_empty(nfq_packet& p)
+{
+    //int len = recv(fd, buffer, buffer_size, 0);
+    memset(buffer, 0, 8192);
+    nfq_p = &p;
+    int result = nfq_handle_packet(handle, buffer, 0);
+    return result;
+}
+
 
 
 int nfqueue::accept_packet(const nfq_packet& p)
 {
-    mtx.lock();
-    int result = nfq_set_verdict(queue_handle, p.get_id(), NF_ACCEPT, p.data_len, p.data);
-    mtx.unlock();
+    printf("%d\n", p.id);
+    int result = nfq_set_verdict(queue_handle, p.id, NF_ACCEPT, p.data_len, static_cast<unsigned char *>(p.data));
     return result;
 }
 
@@ -114,7 +122,7 @@ void nfqueue::unsafe_close_handle()
 }
 
 
-int nfqueue::callback(nfq_q_handle *qh, nfgenmsg *nfmsg, nfq_data *nfa, void *data)
+int nfqueue::callback(nfq_q_handle *, nfgenmsg *, nfq_data *nfa, void *data)
 {
     nfq_packet *p = *(static_cast<nfq_packet **>(data));
     unsigned char *buf;

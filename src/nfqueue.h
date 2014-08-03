@@ -7,6 +7,7 @@
 
 #include <mutex>
 
+#include "packet.h"
 #include "nfq_packet.h"
 
 
@@ -29,19 +30,18 @@ class nfqueue
 {
     public:
         static const u_int16_t PROTOCOL_FAMILY = AF_INET;
-        static const size_t BUFFER_SIZE = 4096;
 
         nfqueue(u_int16_t pf = PROTOCOL_FAMILY,
-                u_int16_t qn = 0,
-                size_t buffer_size = BUFFER_SIZE);
+                u_int16_t qn = 0);
         ~nfqueue();
 
         void open();
         void close();
 
-        int handle_next_packet(nfq_packet&);
+        int recv_packet(packet&);
+        int handle_packet(const packet&, nfq_packet&);
         int accept_packet(const nfq_packet&);
-
+        int handle_empty(nfq_packet&);
     private:
         static int callback(nfq_q_handle *, nfgenmsg *, nfq_data *, void *);
 
@@ -55,11 +55,6 @@ class nfqueue
         nfq_q_handle *queue_handle;
         int fd;
 
-        size_t buffer_size;
-        char *buffer;
-
-        std::mutex mtx;
-
-        /* need something like singleton here */
-        nfq_packet *packet;
+        nfq_packet *nfq_p;
+        char * buffer;
 };
