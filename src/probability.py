@@ -2,6 +2,7 @@ from __future__ import division
 
 from math import log
 from scipy.special import binom
+from scipy.optimize import minimize
 import numpy as np
 
 def C(p, p0):
@@ -23,19 +24,20 @@ def P(c, p0, eps=0.00001):
 def coef(i, p):
     return binom(N, i) * p**i*(1-p)**(N-i) 
 
-def A(c, N, M):
-    points = (np.array(xrange(M)) + 1) / (M + 1)
-    A = np.matrix([np.array([coef(i, p) for i in xrange(N)]) for p in points])
-    b = np.array([P(c, p) for p in points])
-    a, _, _, _ = np.linalg.lstsq(A, b)
-    return a
+def err(points, x, c):
+    err = 0
+    for p in points:
+        err += (sum(x[i]*coef(i, p) for i in xrange(N)) - P(c, p))**2
+    return err
 
 if __name__ == '__main__':
     N = 10 # Buffer size
     M = 100 # Num of points
     c = 0.15
+    points = (np.array(xrange(M)) + 1) / (M + 1)
+    err2 = lambda x: err(points, x, c)
     
-    a = A(c, N)
+    a = minimize(err2, [0] * N, bounds=[[0, 1]] * N).x
     p0 = 0.7
     x = np.array([coef(i, p0) for i in xrange(N)])
     print(np.dot(a, x))
