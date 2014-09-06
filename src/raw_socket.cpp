@@ -1,5 +1,7 @@
 #include "raw_socket.h"
 
+#include <iostream>
+
 #include <unistd.h>           // close()
 #include <string.h>           // strcpy, memset(), and memcpy()
 
@@ -71,7 +73,9 @@ void raw_socket::open()
 
 void raw_socket::close()
 {
+    std::cout << "try close socket" << std::endl;
     ::close(sd);
+    std::cout << "socket closed" << std::endl;
 }
 
 

@@ -1,5 +1,7 @@
 #include "nfqueue.h"
 
+#include <iostream>
+
 #include <string.h>
 #include <netinet/in.h>
 #include <linux/netfilter.h>
@@ -9,15 +11,13 @@
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
-#include <stdio.h>
-
 namespace
 {
     u_int32_t get_packet_id(nfq_data *nfa);
 }
 
 
-nfqueue::nfqueue(u_int16_t pf, u_int16_t qn)
+nfqueue::nfqueue(u_int16_t qn, u_int16_t pf)
     :protocol_family(pf), queue_num(qn), handle(0), queue_handle(0), nfq_p(0), buffer(new char[8192])
 {
 }
@@ -59,6 +59,7 @@ void nfqueue::open()
 
 void nfqueue::close()
 {
+    std::cout << "try close nfqueue" << std::endl;
     if (handle)
     {
         if (queue_handle)
@@ -67,6 +68,7 @@ void nfqueue::close()
         }
         unsafe_close_handle();
     }
+    std::cout << "nfqueue closed" << std::endl;
 }
 
 
@@ -95,18 +97,24 @@ int nfqueue::accept_packet(const nfq_packet& p)
 
 void nfqueue::unsafe_destroy_queue()
 {
+    std::cout << "try destroy queue" << std::endl;
     nfq_destroy_queue(queue_handle);
+    queue_handle = 0;
+    std::cout << "queue destroyed" << std::endl;
 }
 
 
 void nfqueue::unsafe_close_handle()
 {
+    std::cout << "try close handle" << std::endl;
 #ifdef INSANE
     /* normally, applications SHOULD NOT issue this command, since
      * it detaches other programs/sockets from <protocol_family>, too ! */
     nfq_unbind_pf(handle, protocol_family);
 #endif
     nfq_close(handle);
+    handle = 0;
+    std::cout << "handle closed" << std::endl;
 }
 
 

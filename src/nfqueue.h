@@ -31,8 +31,8 @@ class nfqueue
     public:
         static const u_int16_t PROTOCOL_FAMILY = AF_INET;
 
-        nfqueue(u_int16_t pf = PROTOCOL_FAMILY,
-                u_int16_t qn = 0);
+        nfqueue(u_int16_t qn = 0,
+                u_int16_t pf = PROTOCOL_FAMILY);
         ~nfqueue();
 
         void open();
