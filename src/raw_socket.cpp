@@ -20,11 +20,11 @@ namespace
 const int raw_socket::ON = 1;
 
 
-raw_socket::raw_socket(const char *if_name, int mark)
+raw_socket::raw_socket(const std::string& if_name, int mark)
     : sd(-1), mark(mark), if_idx(new ifreq), iph(new ip), sin(new sockaddr_in)
 {
     memset(if_idx, 0, sizeof(ifreq));
-    strncpy(if_idx->ifr_name, if_name, IFNAMSIZ - 1);
+    strncpy(if_idx->ifr_name, if_name.c_str(), IFNAMSIZ - 1);
 
     sin->sin_family = AF_INET;
 

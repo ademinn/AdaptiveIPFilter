@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdexcept>
+#include <string>
 #include <netinet/in.h>
 
 struct ip;
@@ -21,7 +22,7 @@ class raw_socket
     public:
         static const int ON;
 
-        raw_socket(const char *if_name, int mark);
+        raw_socket(const std::string& if_name, int mark);
         ~raw_socket();
 
         void open();
