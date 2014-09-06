@@ -88,7 +88,6 @@ int nfqueue::handle_packet(const packet& rp, nfq_packet& p)
 
 int nfqueue::accept_packet(const nfq_packet& p)
 {
-    printf("%d\n", p.id);
     int result = nfq_set_verdict(queue_handle, p.id, NF_ACCEPT, p.data_len, static_cast<unsigned char *>(p.data));
     return result;
 }

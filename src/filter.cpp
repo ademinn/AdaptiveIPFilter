@@ -10,10 +10,14 @@
  * NFQUEUE    all  --  anywhere             anywhere             NFQUEUE num 0
  */
 #include <iostream>
+#include <fstream>
 #include <string>
 
 #include <thread>
 #include <atomic>
+
+#include <jsoncpp/json/json.h>
+#include <jsoncpp/json/reader.h>
 
 #include "nfqueue.h"
 #include "ring_buffer.h"
@@ -60,12 +64,26 @@ int main(int argc, char **argv)
 {
     if (argc < 2)
     {
-        std::cout << "interface not specified" << std::endl;
+        std::cout << "config file not specified" << std::endl;
         return 1;
     }
+    std::ifstream config(argv[1], std::ios::in);
+    //std::string config(argv[1]);
+    Json::Value root;
+    Json::Reader reader;
+    bool parsingSuccessful = reader.parse(config, root);
+    if (!parsingSuccessful)
+    {
+        std::cout << "failed to parse config file" << std::endl <<
+            reader.getFormatedErrorMessages();
+        return 1;
+    }
+
+    std::string interface = root["interface"].asString();
+    int mark = root["mark"].asInt();
+
     std::atomic_bool exit_flag(false);
-    std::string if_name(argv[1]);
-    raw_socket sock(if_name, 2);
+    raw_socket sock(interface, 2);
     sock.open();
 
     nfqueue queue(nfqueue::PROTOCOL_FAMILY, 1);
@@ -76,8 +94,8 @@ int main(int argc, char **argv)
 
     iptables ipt;
     ipt.add_rule("OUTPUT", "-t mangle -m mark --mark 2 -j ACCEPT");
-    ipt.add_rule("POSTROUTING", std::string("-t mangle -m mark --mark 2 -j ACCEPT -o ") + if_name);
-    ipt.add_rule("POSTROUTING", std::string("-t mangle -j NFQUEUE --queue-num 1 -o ") + if_name);
+    ipt.add_rule("POSTROUTING", std::string("-t mangle -m mark --mark 2 -j ACCEPT -o ") + interface);
+    ipt.add_rule("POSTROUTING", std::string("-t mangle -j NFQUEUE --queue-num 1 -o ") + interface);
 
     std::string action;
     while (!exit_flag)

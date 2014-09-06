@@ -28,6 +28,6 @@ add_executable(filter ${FILTER_EXE})
 
 add_executable(channel ${CHANNEL_EXE})
 
-target_link_libraries(filter nfq iptables raw_socket)
+target_link_libraries(filter nfq iptables raw_socket jsoncpp)
 
-target_link_libraries(channel nfq iptables raw_socket)
+target_link_libraries(channel nfq iptables raw_socket jsoncpp)
