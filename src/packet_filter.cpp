@@ -31,6 +31,7 @@ int packet_filter::execute()
 {
     queue.open();
     sock.open();
+
     std::thread process_thread([this](){this->process_packets();});
     std::thread capture_thread([this](){this->capture_packets();});
 

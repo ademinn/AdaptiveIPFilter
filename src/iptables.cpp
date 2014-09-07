@@ -1,6 +1,7 @@
 #include "iptables.h"
 
 #include <iostream>
+#include <sstream>
 
 #include <cstdlib>
 
@@ -29,9 +30,11 @@ void iptables::delete_rule(const std::string &chain, const std::string &rule)
 }
 
 
-void iptables::add_rule(const std::string &chain, const std::string &rule)
+void iptables::add_rule(std::string chain, std::string rule)
 {
     std::cout << "iptables -A " << chain << " " << rule << std::endl;
     rules.push_back(std::pair<std::string, std::string>(chain, rule));
-    system((std::string("iptables -A ") + chain + " " + rule).c_str());
+    std::stringstream cmd;
+    cmd << "iptables -A " << chain << " " << rule;
+    system(cmd.str().c_str());
 }

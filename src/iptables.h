@@ -11,7 +11,7 @@ class iptables
         iptables() {};
         ~iptables();
 
-        void add_rule(const std::string& chain, const std::string& rule);
+        void add_rule(std::string chain, std::string rule);
         void clear();
     private:
         void delete_rule(const std::string& chain, const std::string& rule);

@@ -11,12 +11,71 @@
  */
 #include <algorithm>
 #include <vector>
+#include <queue>
 #include <chrono>
 #include <thread>
+#include <random>
 #include <jsoncpp/json/json.h>
 
 #include "config.h"
 #include "packet_filter.h"
+
+
+class history
+{
+    public:
+        history(size_t size)
+            : max_size(size),
+            count(0)
+        {}
+
+        void add_zero();
+        void add_one();
+        
+        size_t count_ones() const;
+    private:
+        void align();
+
+        size_t max_size;
+        std::queue<bool> queue;
+
+        size_t count;
+};
+
+
+void history::add_zero()
+{
+    queue.push(false);
+    align();
+}
+
+
+void history::add_one()
+{
+    queue.push(true);
+    count++;
+    align();
+}
+
+
+size_t history::count_ones() const
+{
+    return count;
+}
+
+
+void history::align()
+{
+    while (queue.size() > max_size)
+    {
+        bool value = queue.front();
+        if (value)
+        {
+            count--;
+        }
+        queue.pop();
+    }
+}
 
 
 class filter_config : public config
@@ -25,13 +84,16 @@ class filter_config : public config
         filter_config(const Json::Value& value);
 
         int delay;
+        int hist_size;
+
         std::vector<double> coeff;
 };
 
 
 filter_config::filter_config(const Json::Value& value)
     : config(value),
-    delay(value["delay"].asInt())
+    delay(value["delay"].asInt()),
+    hist_size(value["N"].asInt() - 1)
 {
     Json::Value c = value["coeff"];
     coeff.resize(c.size());
@@ -45,14 +107,21 @@ class adaptive_filter : public packet_filter
         adaptive_filter(const filter_config& conf)
             : packet_filter(conf, {"OUTPUT", "POSTROUTING"}, "POSTROUTING"),
             delay(conf.delay),
-            coeff(conf.coeff)
+            coeff(conf.coeff),
+            hist(conf.hist_size),
+            dist(0.0, 1.0)
         {}
     protected:
         void process_packets();
     private:
-        std::chrono::milliseconds delay;
+        bool event(double p);
 
+        std::chrono::milliseconds delay;
         std::vector<double> coeff;
+        history hist;
+
+        std::default_random_engine gen;
+        std::uniform_real_distribution<double> dist;
 };
 
 
@@ -77,11 +146,24 @@ void adaptive_filter::process_packets()
         }
         if (!packet_sent)
         {
-            sock.send_empty_packet(p.src(), p.dst());
+            if (event(coeff[hist.count_ones()]))
+            {
+                sock.send_empty_packet(p.src(), p.dst());
+                hist.add_zero();
+            }
+        } else
+        {
+            hist.add_one();
         }
         std::this_thread::sleep_for(delay);
     }
     std::cout << "exit processing packets" << std::endl;
+}
+
+
+bool adaptive_filter::event(double p)
+{
+    return p > dist(gen);
 }
 
 
