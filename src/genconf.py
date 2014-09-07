@@ -21,8 +21,9 @@ if __name__ == '__main__':
 
     channel_parser = subparsers.add_parser('channel')
     channel_parser.add_argument('--zero-delay', dest='zero_delay', type=int)
-    channel_parser.add_argument('--one-delay', dest='one delay', type=int)
+    channel_parser.add_argument('--one-delay', dest='one_delay', type=int)
     channel_parser.add_argument('--msg')
+    channel_parser.add_argument('--path')
     channel_parser.add_argument('--warm', type=int, default=10)
 
     args = parser.parse_args()
@@ -33,7 +34,12 @@ if __name__ == '__main__':
         a = probability.calc(args.N, args.M, args.c)
         result['coeff'] = a
     else:
-        result['msg'] = [False, False, False] + coder.get_bits(args.msg) + [True, True, True]
+        if args.msg:
+            msg = args.msg
+        else:
+            with open(args.path, 'r') as f:
+                msg = f.read()
+        result['msg'] = coder.encode(msg)
 
     with open(args.conf, 'w') as f:
         json.dump(result, f)

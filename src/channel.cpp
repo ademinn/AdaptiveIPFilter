@@ -77,6 +77,9 @@ void channel_filter::process_packets()
         queue.accept_packet(p);
     }
     std::cout << "sending message..." << std::endl;
+    int last_shown = -1;
+    int done = 0;
+    int count = 0;
     bool packet_sent;
     for (bool value : bits)
     {
@@ -102,6 +105,13 @@ void channel_filter::process_packets()
         {
             sock.send_empty_packet(p.src(), p.dst());
         }
+        //count++;
+        //done = (count * 100) / bits.size();
+        //if (done != last_shown)
+        //{
+        //    std::cout << done << "%" << std::endl;
+        //    last_shown = done;
+        //}
     }
     std::cout << "message sent" << std::endl;
     while (!exit_flag)
