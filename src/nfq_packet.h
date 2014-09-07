@@ -9,6 +9,8 @@ struct ip;
 class nfq_packet : public packet
 {
     public:
+        static const u_int32_t MAX_PAYLOAD = 1500;
+
         nfq_packet();
         nfq_packet(const nfq_packet&);
 

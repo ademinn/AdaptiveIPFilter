@@ -21,12 +21,19 @@ class channel_config : public config
     public:
         channel_config(const Json::Value& value);
 
+        int zero_delay;
+        int one_delay;
+        int warm;
+
         std::vector<bool> bits;
 };
 
 
 channel_config::channel_config(const Json::Value& value)
-    : config(value)
+    : config(value),
+    zero_delay(value["zero_delay"].asInt()),
+    one_delay(value["one_delay"].asInt()),
+    warm(value["warm"].asInt())
 {
     Json::Value msg = value["msg"];
     bits.resize(msg.size());
@@ -38,11 +45,20 @@ class channel_filter : public packet_filter
 {
     public:
         channel_filter(const channel_config& conf)
-            : packet_filter(conf, {"OUTPUT"}, "OUTPUT"), bits(conf.bits)
+            : packet_filter(conf, {"OUTPUT"}, "OUTPUT"),
+            zero(conf.zero_delay),
+            one(conf.one_delay),
+            warm(conf.warm),
+            bits(conf.bits)
         {}
     protected:
         void process_packets();
     private:
+        std::chrono::milliseconds zero;
+        std::chrono::milliseconds one;
+
+        int warm;
+
         std::vector<bool> bits;
 };
 
@@ -51,8 +67,6 @@ void channel_filter::process_packets()
 {
     packet rp;
     nfq_packet p;
-    std::chrono::milliseconds zero(100);
-    std::chrono::milliseconds one(500);
     for (int i = 0; i < 10; i++)
     {
         rp = rbuf.pop();
@@ -62,19 +76,18 @@ void channel_filter::process_packets()
         }
         queue.accept_packet(p);
     }
-    int cnt = 0;
+    std::cout << "sending message..." << std::endl;
+    bool packet_sent;
     for (bool value : bits)
     {
         if (value)
         {
-            std::cout << "send one" << std::endl;
             std::this_thread::sleep_for(one);
         } else
         {
-            std::cout << "send zero" << std::endl;
             std::this_thread::sleep_for(zero);
         }
-        bool packet_sent = false;
+        packet_sent = false;
         while (!rbuf.is_empty() && !packet_sent)
         {
             rp = rbuf.pop();
@@ -84,16 +97,13 @@ void channel_filter::process_packets()
             }
             queue.accept_packet(p);
             packet_sent = true;
-            std::cout << "bit sent" << std::endl;
         }
         if (!packet_sent)
         {
             sock.send_empty_packet(p.src(), p.dst());
-            std::cout << "bit sent" << std::endl;
         }
-        cnt++;
     }
-    std::cout << "msg sent " << cnt << std::endl;
+    std::cout << "message sent" << std::endl;
     while (!exit_flag)
     {
         rp = rbuf.pop();
@@ -101,8 +111,6 @@ void channel_filter::process_packets()
         {
             continue;
         }
-        //sock.send_empty_packet(p.src(), p.dst());
-        //p.set_data_len(1500);
         queue.accept_packet(p);
     }
     std::cout << "exit processing packets" << std::endl;
