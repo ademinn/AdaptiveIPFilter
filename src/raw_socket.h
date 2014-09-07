@@ -28,7 +28,10 @@ class raw_socket
         void open();
         void close();
 
-        void send_empty_packet(const in_addr &src, const in_addr &dst);
+        void send_empty_packet(
+                const in_addr &src,
+                const in_addr &dst,
+                size_t payload_len = 0);
     private:
         int sd;
         int mark;

@@ -148,7 +148,7 @@ void adaptive_filter::process_packets()
         {
             if (event(coeff[hist.count_ones()]))
             {
-                sock.send_empty_packet(p.src(), p.dst());
+                sock.send_empty_packet(p.src(), p.dst(), nfq_packet::MAX_PAYLOAD);
                 hist.add_zero();
             }
         } else

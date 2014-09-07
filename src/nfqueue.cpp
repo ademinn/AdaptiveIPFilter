@@ -82,6 +82,7 @@ int nfqueue::recv_packet(packet& rp)
 
 int nfqueue::handle_packet(const packet& rp, nfq_packet& p)
 {
+    p.clear();
     nfq_p = &p;
     int result = nfq_handle_packet(handle, static_cast<char *>(rp.data), rp.data_len);
     return result;

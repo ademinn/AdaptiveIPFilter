@@ -5,7 +5,7 @@
 
 
 packet::packet()
-    : data_len(0), data(malloc(BUFFER_SIZE))
+    : data_len(0), data(calloc(BUFFER_SIZE, 1))
 {}
 
 

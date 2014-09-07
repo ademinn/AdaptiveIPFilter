@@ -11,6 +11,8 @@
 #include <sys/ioctl.h>        // macro ioctl is defined
 #include <net/if.h>           // struct ifreq
 
+#include "nfq_packet.h"
+
 
 namespace
 {
@@ -23,7 +25,9 @@ const int raw_socket::ON = 1;
 
 
 raw_socket::raw_socket(const std::string& if_name, int mark)
-    : sd(-1), mark(mark), if_idx(new ifreq), iph(new ip), sin(new sockaddr_in)
+    : sd(-1), mark(mark), if_idx(new ifreq),
+    iph(static_cast<ip *>(calloc(nfq_packet::MAX_PAYLOAD, 1))),
+    sin(new sockaddr_in)
 {
     memset(if_idx, 0, sizeof(ifreq));
     strncpy(if_idx->ifr_name, if_name.c_str(), IFNAMSIZ - 1);
@@ -87,13 +91,17 @@ raw_socket::~raw_socket()
 }
 
 
-void raw_socket::send_empty_packet(const in_addr &src, const in_addr &dst)
+void raw_socket::send_empty_packet(const in_addr &src, const in_addr &dst, size_t payload_len)
 {
+    if (!payload_len)
+    {
+        payload_len = sizeof(ip);
+    }
     iph->ip_src = src;
     iph->ip_dst = dst;
     ip_checksum(iph);
     sin->sin_addr.s_addr = dst.s_addr;
-    if (sendto(sd, iph, sizeof(ip), 0, reinterpret_cast<sockaddr *>(sin), sizeof(sockaddr)) < 0)
+    if (sendto(sd, iph, payload_len, 0, reinterpret_cast<sockaddr *>(sin), sizeof(sockaddr)) < 0)
     {
         throw raw_socket_exception("sendto() failed");
     }
